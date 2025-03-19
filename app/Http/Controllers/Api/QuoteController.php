@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateQuoteRequest;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Gate;
 use App\Http\Resources\QuoteCollection;
 use App\Http\Resources\QuoteResource;
 use Illuminate\Database\Eloquent\Collection;
@@ -37,16 +38,22 @@ class QuoteController extends Controller
         $validate = $request->validate([
             'quote' => ['required','string'],
             'author' => ['required','string'],
-            'source' => ['required','string']
+            'source' => ['required','string'],
+            'tags' => ['required','array'],
+            'categories' => ['required','array']
         ]);
         $wordCount = str_word_count($request->quote);
-        Quote::create([
+       $quote =  Quote::create([
             'quote' => $request->quote,
             'author' => $request->author,
             'source' => $request->source,
             'word_count' => $wordCount,
             'user_id' => $userID ?? null,
+            
         ]);
+        foreach($request->tags as $tag){
+            $quote->tags()->attach($tag);
+        }
         return response()->json([
             'message' => 'User ' . Auth::user()->name . ' added a quote successfully',
             
@@ -78,12 +85,19 @@ class QuoteController extends Controller
             'quote_id' => ['required','numeric', 'exists:quotes,id']
         ]);
 
+
         if ($validator->fails()) {
             return response()->json([
             'errors' => $validator->errors()
             ], 422);
         }
         $quote = Quote::find($request->quote_id);
+        
+        // Gates 
+        if(!Gate::alows('manage_quote',$quote)){
+            abort(403,'Unauthorized Action');
+        }
+
         $newWordCount = str_word_count($request->quote);
         $quote->update([
             'quote' => $request->quote,
@@ -108,7 +122,10 @@ class QuoteController extends Controller
         $validate = Validator::make(['id' => $id], [
             'id' => ['required','numeric']
         ]);
-        $quote = Quote::find($id)->where('user_id',Auth::user()->id);
+        $quote = Quote::find($id);
+        if(!Gate::alows('manage_quote',$quote)){
+            abort(403,'Unauthorized Action');
+        }
         // return response()->json(['user'=>Auth::user()->id]);
         $quote->delete();
 
